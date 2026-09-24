@@ -1,15 +1,15 @@
 # Mini AI
 
-A clean, fast, ChatGPT-style general assistant powered by Google's Gemini API.
+Mini AI is a clean, fast, ChatGPT-style general assistant powered by Google's Gemini API.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FRishikeshsanin%2FMini-AI-Chatbot&project-name=mini-ai-chatbot&repository-name=Mini-AI-Chatbot&env=GEMINI_API_KEY&envDescription=Required%20Gemini%20API%20key%20from%20Google%20AI%20Studio)
+**Live app:** https://miniaichatbot.vercel.app
 
-## Features
+## V1 features
 
-- Gemini 3.8 Flash by default
+- Gemini 3.8 Flash as the primary model
+- Automatic failover to Gemini 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - Multi-turn conversation context
-- Optional Google Search grounding for current questions
-- Source links when web grounding is used
+- Safer uncertainty-aware system behavior
 - Local conversation history with new/delete chat controls
 - Dark and light themes
 - Responsive desktop/mobile UI
@@ -43,31 +43,37 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Then set your Gemini key in `.env.local`:
+Set the environment values in `.env.local`:
 
 ```env
 GEMINI_API_KEY=your_key_here
 GEMINI_MODEL=gemini-3.8-flash
+ENABLE_WEB_SEARCH=false
 ```
 
-Open http://localhost:3000.
+Then open http://localhost:3000.
 
 ## Deployment
 
-Use the **Deploy with Vercel** button above. Set:
+Import this repository into Vercel and configure:
 
-- `GEMINI_API_KEY` — required, encrypted
+- `GEMINI_API_KEY` — required
 - `GEMINI_MODEL` — optional; defaults to `gemini-3.8-flash`
+- `ENABLE_WEB_SEARCH` — optional; keep `false` unless Google Search grounding is enabled for the API project
 
 Never commit a real API key.
 
-Every push to `main` runs the GitHub Actions production build check. Once imported into Vercel, Git integration can deploy future pushes automatically.
+Every push to `main` runs a production build check in GitHub Actions.
 
-## Notes
+## Reliability
 
-The **Web** toggle enables Gemini's Google Search grounding. Search grounding can have separate API usage/billing from normal model calls, depending on your Gemini plan.
+Mini AI automatically falls back across stable Gemini Flash models when the primary model is temporarily overloaded or unavailable. Each provider attempt has a bounded timeout so the fallback chain stays inside the serverless request window.
 
-Chat history is stored only in the browser's local storage in this version. There is no account system or database.
+Web Search is server-gated and disabled by default. Enabling it requires an API project/plan that supports Google Search grounding.
+
+## Privacy
+
+Conversation history is stored in the browser's local storage in this V1. There is no user-account database. The Gemini API key stays server-side.
 
 ## License
 

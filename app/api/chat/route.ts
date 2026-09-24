@@ -43,17 +43,17 @@ function modelChain() {
   );
 }
 
-function errorMessage(status: number, raw?: string) {
+function errorMessage(status: number) {
   if (status === 429) return "The AI service is rate-limited right now. Please try again shortly.";
-  if (status === 401 || status === 403) return "The Gemini API key is invalid, lacks access to this feature, or the selected feature requires billing.";
-  if (status === 404) return "The configured Gemini model is unavailable.";
+  if (status === 401 || status === 403) return "The Gemini API key is invalid or does not have access to this request.";
+  if (status === 404) return "The configured Gemini models are temporarily unavailable.";
   if (status === 400) return "Gemini could not process that request. Try rephrasing it.";
   if (status >= 500) return "Gemini is temporarily busy. Please try again in a moment.";
-  return raw ? `Gemini returned an error: ${raw.slice(0, 180)}` : "The AI service is temporarily unavailable.";
+  return "The AI service is temporarily unavailable.";
 }
 
 function shouldFallback(status: number) {
-  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  return status === 404 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 
 async function callGemini(
@@ -70,7 +70,7 @@ async function callGemini(
         "x-goog-api-key": apiKey,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(12_000),
       cache: "no-store",
     },
   );
@@ -89,10 +89,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let body: any;
   try {
-    const body = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  try {
     const rawMessages = body?.messages;
-    const useSearch = body?.useSearch === true;
+    const useSearch =
+      process.env.ENABLE_WEB_SEARCH === "true" &&
+      body?.useSearch === true;
 
     if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
       return NextResponse.json({ error: "A message is required." }, { status: 400 });
@@ -126,7 +134,6 @@ export async function POST(request: NextRequest) {
       },
       contents,
       generationConfig: {
-        temperature: 0.7,
         maxOutputTokens: 8192,
       },
     };
@@ -139,7 +146,6 @@ export async function POST(request: NextRequest) {
     let finalData: any = null;
     let modelUsed = "";
     let lastStatus = 503;
-    let lastDetail = "";
 
     for (const model of modelChain()) {
       try {
@@ -151,28 +157,31 @@ export async function POST(request: NextRequest) {
         if (response.ok) break;
 
         lastStatus = response.status;
-        lastDetail = data?.error?.message || response.statusText;
+        const detail = data?.error?.message || response.statusText;
 
         if (!shouldFallback(response.status)) {
-          console.error("Gemini API error", model, response.status, lastDetail);
+          console.error("Gemini API error", model, response.status, detail);
           return NextResponse.json(
-            { error: errorMessage(response.status, lastDetail) },
+            { error: errorMessage(response.status) },
             { status: response.status },
           );
         }
 
-        console.warn("Gemini model unavailable, trying fallback", model, response.status, lastDetail);
+        console.warn("Gemini model unavailable, trying fallback", model, response.status, detail);
       } catch (error) {
         lastStatus = 504;
-        lastDetail = error instanceof Error ? error.message : "Request failed";
-        console.warn("Gemini model request failed, trying fallback", model, lastDetail);
+        console.warn(
+          "Gemini model request failed, trying fallback",
+          model,
+          error instanceof Error ? error.message : "Request failed",
+        );
       }
     }
 
     if (!finalResponse?.ok) {
-      console.error("All Gemini models failed", lastStatus, lastDetail);
+      console.error("All Gemini models failed", lastStatus);
       return NextResponse.json(
-        { error: errorMessage(lastStatus, lastDetail) },
+        { error: errorMessage(lastStatus) },
         { status: lastStatus },
       );
     }
@@ -215,9 +224,6 @@ export async function POST(request: NextRequest) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    if (error instanceof Error && error.name === "TimeoutError") {
-      return NextResponse.json({ error: "The AI took too long to respond. Please try again." }, { status: 504 });
-    }
     console.error("Chat route error", error);
     return NextResponse.json({ error: "Something went wrong while generating the response." }, { status: 500 });
   }

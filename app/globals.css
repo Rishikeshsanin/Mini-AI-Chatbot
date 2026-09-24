@@ -800,6 +800,10 @@ blockquote {
   justify-content: space-between;
 }
 
+.composer-bottom-end {
+  justify-content: flex-end;
+}
+
 .composer-web {
   height: 30px;
   padding: 0 8px;

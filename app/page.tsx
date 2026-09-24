@@ -152,9 +152,13 @@ function TextBlock({ text }: { text: string }) {
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1300);
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1300);
+    } catch {
+      // Clipboard access can be unavailable in some browsers.
+    }
   }
   return (
     <div className="code-block">
@@ -200,7 +204,10 @@ export default function Home() {
     document.documentElement.dataset.theme = storedTheme;
 
     try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]") as Chat[];
+      const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      const stored = Array.isArray(parsed)
+        ? (parsed as Chat[]).filter((chat) => chat && typeof chat.id === "string" && Array.isArray(chat.messages))
+        : [];
       if (stored.length) {
         setChats(stored);
         const remembered = localStorage.getItem(ACTIVE_KEY);
@@ -219,11 +226,24 @@ export default function Home() {
 
   useEffect(() => {
     if (!chats.length) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(chats.slice(0, 30)));
+    try {
+      const safeChats = chats.slice(0, 20).map((chat) => ({
+        ...chat,
+        messages: chat.messages.slice(-60),
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(safeChats));
+    } catch {
+      // Storage limits should never break the chat experience.
+    }
   }, [chats]);
 
   useEffect(() => {
-    if (activeId) localStorage.setItem(ACTIVE_KEY, activeId);
+    if (!activeId) return;
+    try {
+      localStorage.setItem(ACTIVE_KEY, activeId);
+    } catch {
+      // Ignore unavailable browser storage.
+    }
   }, [activeId]);
 
   useEffect(() => {
@@ -264,7 +284,11 @@ export default function Home() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
     document.documentElement.dataset.theme = next;
-    localStorage.setItem(THEME_KEY, next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // Theme still applies for the current session.
+    }
   }
 
   async function sendMessage(value?: string) {
@@ -290,12 +314,16 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: nextMessages.map(({ role, content }) => ({ role, content })),
-          useSearch,
+          messages: nextMessages
+            .filter((message) =>
+              !(message.role === "assistant" &&
+                (message.error || message.content.startsWith("I couldn't complete that request.")))
+            )
+            .map(({ role, content }) => ({ role, content })),
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error || "Something went wrong.");
 
       const assistant: Message = {
@@ -304,6 +332,7 @@ export default function Home() {
         content: data.message,
         sources: Array.isArray(data.sources) ? data.sources : [],
         model: typeof data.model === "string" ? data.model : undefined,
+        error: false,
       };
       updateActive((chat) => ({ ...chat, messages: [...chat.messages, assistant] }));
     } catch (error) {
@@ -313,6 +342,7 @@ export default function Home() {
         content: error instanceof Error
           ? `I couldn't complete that request. ${error.message}`
           : "I couldn't complete that request. Please try again.",
+        error: true,
       };
       updateActive((chat) => ({ ...chat, messages: [...chat.messages, assistant] }));
     } finally {
@@ -342,9 +372,13 @@ export default function Home() {
   }
 
   async function copyMessage(message: Message) {
-    await navigator.clipboard.writeText(message.content);
-    setCopiedMessage(message.id);
-    setTimeout(() => setCopiedMessage(null), 1300);
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessage(message.id);
+      setTimeout(() => setCopiedMessage(null), 1300);
+    } catch {
+      // Clipboard access can be unavailable in some browsers.
+    }
   }
 
   if (!activeChat) return <div className="boot"><div className="orb" /></div>;
@@ -358,7 +392,7 @@ export default function Home() {
           <div><strong>Mini AI</strong><span>Personal assistant</span></div>
         </div>
 
-        <button className="new-chat" onClick={createChat} type="button"><PlusIcon />New chat<span className="shortcut">Ctrl K</span></button>
+        <button className="new-chat" onClick={createChat} type="button"><PlusIcon />New chat</button>
 
         <div className="history-label">Recent</div>
         <div className="history">
@@ -385,9 +419,6 @@ export default function Home() {
             <div className="model-name"><span>Mini AI</span><div className="model-pill"><SparkIcon size={13} />Gemini Flash</div></div>
           </div>
           <div className="topbar-actions">
-            <button className="web-toggle locked" type="button" title="Web search requires Gemini API billing" disabled>
-              <GlobeIcon /><span>Web</span><i />
-            </button>
             <button className="icon-button" onClick={toggleTheme} aria-label="Toggle theme" type="button">{theme === "dark" ? <SunIcon /> : <MoonIcon />}</button>
           </div>
         </header>
@@ -465,8 +496,7 @@ export default function Home() {
               disabled={sending}
               aria-label="Message Mini AI"
             />
-            <div className="composer-bottom">
-              <button className="composer-web locked" type="button" title="Web search requires Gemini API billing" disabled><GlobeIcon />Web</button>
+            <div className="composer-bottom composer-bottom-end">
               <button className="send-button" type="submit" disabled={!input.trim() || sending} aria-label="Send message"><SendIcon /></button>
             </div>
           </form>
