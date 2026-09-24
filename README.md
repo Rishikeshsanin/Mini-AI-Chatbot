@@ -2,6 +2,8 @@
 
 A clean, fast, ChatGPT-style general assistant powered by Google's Gemini API.
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FRishikeshsanin%2FMini-AI-Chatbot&project-name=mini-ai-chatbot&repository-name=Mini-AI-Chatbot&env=GEMINI_API_KEY&envDescription=Required%20Gemini%20API%20key%20from%20Google%20AI%20Studio)
+
 ## Features
 
 - Gemini 3.8 Flash by default
@@ -16,6 +18,7 @@ A clean, fast, ChatGPT-style general assistant powered by Google's Gemini API.
 - Server-side API key protection
 - Friendly API, quota, timeout, and configuration errors
 - Health endpoint at `/api/health`
+- GitHub Actions production-build verification
 
 ## Stack
 
@@ -51,12 +54,14 @@ Open http://localhost:3000.
 
 ## Deployment
 
-Deploy the repository to Vercel and add:
+Use the **Deploy with Vercel** button above. Set:
 
 - `GEMINI_API_KEY` — required, encrypted
 - `GEMINI_MODEL` — optional; defaults to `gemini-3.8-flash`
 
 Never commit a real API key.
+
+Every push to `main` runs the GitHub Actions production build check. Once imported into Vercel, Git integration can deploy future pushes automatically.
 
 ## Notes
 
