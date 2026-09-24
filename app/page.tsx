@@ -371,7 +371,7 @@ export default function Home() {
             <div className="model-name"><span>Mini AI</span><div className="model-pill"><SparkIcon size={13} />Gemini Flash</div></div>
           </div>
           <div className="topbar-actions">
-            <button className={`web-toggle ${useSearch ? "active" : ""}`} onClick={() => setUseSearch((v) => !v)} type="button" title="Let Gemini use Google Search when useful">
+            <button className="web-toggle locked" type="button" title="Web search requires Gemini API billing" disabled>
               <GlobeIcon /><span>Web</span><i />
             </button>
             <button className="icon-button" onClick={toggleTheme} aria-label="Toggle theme" type="button">{theme === "dark" ? <SunIcon /> : <MoonIcon />}</button>
@@ -448,7 +448,7 @@ export default function Home() {
               aria-label="Message Mini AI"
             />
             <div className="composer-bottom">
-              <button className={`composer-web ${useSearch ? "active" : ""}`} onClick={() => setUseSearch((v) => !v)} type="button"><GlobeIcon />Web</button>
+              <button className="composer-web locked" type="button" title="Web search requires Gemini API billing" disabled><GlobeIcon />Web</button>
               <button className="send-button" type="submit" disabled={!input.trim() || sending} aria-label="Send message"><SendIcon /></button>
             </div>
           </form>
