@@ -19,17 +19,57 @@ When you are uncertain, say so rather than inventing facts.
 If Google Search grounding is enabled and you use current information, rely on the retrieved evidence.
 Do not claim you searched the web unless the search tool was actually enabled for this request.`;
 
+const FALLBACK_MODELS = [
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+];
+
+function modelChain() {
+  const primary = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  return [primary, ...FALLBACK_MODELS].filter(
+    (model, index, all) => all.indexOf(model) === index,
+  );
+}
+
 function errorMessage(status: number, raw?: string) {
-  if (status === 429) return "The AI service is temporarily rate-limited. Please try again in a moment.";
-  if (status === 401 || status === 403) return "The Gemini API key is invalid or does not have access to this model.";
-  if (status === 404) return "The configured Gemini model is unavailable. Check GEMINI_MODEL in the deployment settings.";
+  if (status === 429) return "The AI service is rate-limited right now. Please try again shortly.";
+  if (status === 401 || status === 403) return "The Gemini API key is invalid, lacks access to this feature, or the selected feature requires billing.";
+  if (status === 404) return "The configured Gemini model is unavailable.";
   if (status === 400) return "Gemini could not process that request. Try rephrasing it.";
+  if (status >= 500) return "Gemini is temporarily busy. Please try again in a moment.";
   return raw ? `Gemini returned an error: ${raw.slice(0, 180)}` : "The AI service is temporarily unavailable.";
+}
+
+function shouldFallback(status: number) {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+async function callGemini(
+  model: string,
+  apiKey: string,
+  payload: Record<string, unknown>,
+) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(25000),
+      cache: "no-store",
+    },
+  );
+
+  const data = await response.json().catch(() => null);
+  return { response, data };
 }
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
   if (!apiKey) {
     return NextResponse.json(
@@ -76,7 +116,6 @@ export async function POST(request: NextRequest) {
       contents,
       generationConfig: {
         temperature: 0.7,
-        topP: 0.92,
         maxOutputTokens: 8192,
       },
     };
@@ -85,29 +124,49 @@ export async function POST(request: NextRequest) {
       payload.tools = [{ google_search: {} }];
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(55000),
-        cache: "no-store",
-      },
-    );
+    let finalResponse: Response | null = null;
+    let finalData: any = null;
+    let modelUsed = "";
+    let lastStatus = 503;
+    let lastDetail = "";
 
-    const data = await response.json().catch(() => null);
+    for (const model of modelChain()) {
+      try {
+        const { response, data } = await callGemini(model, apiKey, payload);
+        finalResponse = response;
+        finalData = data;
+        modelUsed = model;
 
-    if (!response.ok) {
-      const detail = data?.error?.message || response.statusText;
-      console.error("Gemini API error", response.status, detail);
-      return NextResponse.json({ error: errorMessage(response.status, detail) }, { status: response.status });
+        if (response.ok) break;
+
+        lastStatus = response.status;
+        lastDetail = data?.error?.message || response.statusText;
+
+        if (!shouldFallback(response.status)) {
+          console.error("Gemini API error", model, response.status, lastDetail);
+          return NextResponse.json(
+            { error: errorMessage(response.status, lastDetail) },
+            { status: response.status },
+          );
+        }
+
+        console.warn("Gemini model unavailable, trying fallback", model, response.status, lastDetail);
+      } catch (error) {
+        lastStatus = 504;
+        lastDetail = error instanceof Error ? error.message : "Request failed";
+        console.warn("Gemini model request failed, trying fallback", model, lastDetail);
+      }
     }
 
-    const candidate = data?.candidates?.[0];
+    if (!finalResponse?.ok) {
+      console.error("All Gemini models failed", lastStatus, lastDetail);
+      return NextResponse.json(
+        { error: errorMessage(lastStatus, lastDetail) },
+        { status: lastStatus },
+      );
+    }
+
+    const candidate = finalData?.candidates?.[0];
     const parts: GeminiPart[] = candidate?.content?.parts || [];
     const text = parts.map((part) => part.text || "").join("").trim();
 
@@ -141,7 +200,7 @@ export async function POST(request: NextRequest) {
       }));
 
     return NextResponse.json(
-      { message: text, sources, model },
+      { message: text, sources, model: modelUsed },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
