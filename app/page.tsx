@@ -368,7 +368,7 @@ export default function Home() {
         <header className="topbar">
           <div className="topbar-left">
             <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Open menu" type="button"><MenuIcon /></button>
-            <div className="model-name"><span>Mini AI</span><div className="model-pill"><SparkIcon size={13} />Gemini 3.8 Flash</div></div>
+            <div className="model-name"><span>Mini AI</span><div className="model-pill"><SparkIcon size={13} />Gemini Flash</div></div>
           </div>
           <div className="topbar-actions">
             <button className={`web-toggle ${useSearch ? "active" : ""}`} onClick={() => setUseSearch((v) => !v)} type="button" title="Let Gemini use Google Search when useful">
