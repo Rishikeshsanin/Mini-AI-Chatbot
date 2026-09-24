@@ -10,6 +10,7 @@ type Message = {
   content: string;
   sources?: Source[];
   model?: string;
+  error?: boolean;
 };
 
 type Chat = {
