@@ -9,6 +9,7 @@ type Message = {
   role: "user" | "assistant";
   content: string;
   sources?: Source[];
+  model?: string;
 };
 
 type Chat = {
@@ -108,6 +109,17 @@ function InlineText({ text }: { text: string }) {
   );
 }
 
+function prettyModel(model?: string) {
+  if (!model) return "";
+  const labels: Record<string, string> = {
+    "gemini-3.8-flash": "Gemini 3.8 Flash",
+    "gemini-3.7-flash": "Gemini 3.7 Flash",
+    "gemini-3.6-flash": "Gemini 3.6 Flash",
+    "gemini-3.5-flash-lite": "Gemini 3.5 Flash-Lite",
+  };
+  return labels[model] || model;
+}
+
 function TextBlock({ text }: { text: string }) {
   const lines = text.split("\n");
   return (
@@ -115,6 +127,7 @@ function TextBlock({ text }: { text: string }) {
       {lines.map((line, index) => {
         const trimmed = line.trim();
         if (!trimmed) return <div className="line-gap" key={index} />;
+        if (/^-{3,}$/.test(trimmed)) return <hr className="message-divider" key={index} />;
         if (/^#{1,3}\s/.test(trimmed)) {
           const level = trimmed.match(/^#+/)?.[0].length ?? 1;
           const content = trimmed.replace(/^#{1,3}\s/, "");
@@ -290,6 +303,7 @@ export default function Home() {
         role: "assistant",
         content: data.message,
         sources: Array.isArray(data.sources) ? data.sources : [],
+        model: typeof data.model === "string" ? data.model : undefined,
       };
       updateActive((chat) => ({ ...chat, messages: [...chat.messages, assistant] }));
     } catch (error) {
@@ -398,7 +412,11 @@ export default function Home() {
                 <article className={`message-row ${message.role}`} key={message.id}>
                   <div className="avatar">{message.role === "assistant" ? <SparkIcon size={17} /> : <span>R</span>}</div>
                   <div className="message-main">
-                    <div className="message-meta">{message.role === "assistant" ? "Mini AI" : "You"}</div>
+                    <div className="message-meta">
+                      {message.role === "assistant"
+                        ? `Mini AI${message.model ? ` · ${prettyModel(message.model)}` : ""}`
+                        : "You"}
+                    </div>
                     <div className={`message-bubble ${message.role}`}>
                       <MessageContent content={message.content} />
                     </div>
