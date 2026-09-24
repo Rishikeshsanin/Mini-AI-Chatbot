@@ -2,7 +2,9 @@
 
 Mini AI is a clean, fast, ChatGPT-style general assistant powered by Google's Gemini API.
 
-**Live app:** https://miniaichatbot.vercel.app
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20Mini%20AI-6f52ff?style=for-the-badge)](https://miniaichatbot.vercel.app)
+
+**Live:** https://miniaichatbot.vercel.app
 
 ## V1 features
 
