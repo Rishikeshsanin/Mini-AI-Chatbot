@@ -571,6 +571,13 @@ a {
   height: 8px;
 }
 
+.message-divider {
+  height: 1px;
+  margin: 18px 0;
+  border: 0;
+  background: var(--line);
+}
+
 .list-line {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
